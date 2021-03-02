@@ -1,0 +1,136 @@
+openapi: 3.0.0
+info:
+  title: JSON Echo
+  version: '1.0'
+servers:
+  - url: 'http://echo-json.default.svc.cluster.local'
+    description: Local K8s
+    x-kubernetes-service:
+      spec:
+        ports:
+          - port: 8888
+      metadata:
+        name: echo-json
+paths:
+  /.*:
+    get:
+      summary: Generate an echo response
+      tags: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                description: ''
+                type: object
+                properties:
+                  ts:
+                    type: string
+                    minLength: 1
+                    format: date-time
+                  request:
+                    type: object
+                    required:
+                      - headers
+                      - url
+                      - body
+                      - host
+                      - proto
+                      - method
+                      - form
+                    properties:
+                      headers:
+                        type: object
+                        required:
+                          - Accept
+                          - User-Agent
+                        properties:
+                          Accept:
+                            type: array
+                            items:
+                              type: object
+                          User-Agent:
+                            type: array
+                            items:
+                              type: object
+                      url:
+                        type: object
+                        required:
+                          - Scheme
+                          - Opaque
+                          - Host
+                          - Path
+                          - RawPath
+                          - ForceQuery
+                          - RawQuery
+                          - Fragment
+                          - RawFragment
+                        properties:
+                          Scheme:
+                            type: string
+                          Opaque:
+                            type: string
+                          User: {}
+                          Host:
+                            type: string
+                          Path:
+                            type: string
+                            minLength: 1
+                          RawPath:
+                            type: string
+                          ForceQuery:
+                            type: boolean
+                          RawQuery:
+                            type: string
+                          Fragment:
+                            type: string
+                          RawFragment:
+                            type: string
+                      body:
+                        type: object
+                      host:
+                        type: string
+                        minLength: 1
+                      proto:
+                        type: string
+                        minLength: 1
+                      method:
+                        type: string
+                        minLength: 1
+                      form:
+                        type: object
+                required:
+                  - ts
+                  - request
+              examples:
+                Sample GET:
+                  value:
+                    ts: '2021-03-02T18:20:40.330232912Z'
+                    request:
+                      headers:
+                        Accept:
+                          - '*/*'
+                        User-Agent:
+                          - curl/7.64.1
+                      url:
+                        Scheme: ''
+                        Opaque: ''
+                        User: null
+                        Host: ''
+                        Path: /
+                        RawPath: ''
+                        ForceQuery: false
+                        RawQuery: ''
+                        Fragment: ''
+                        RawFragment: ''
+                      body: {}
+                      host: 'localhost:8888'
+                      proto: HTTP/1.1
+                      method: GET
+                      form: {}
+      operationId: get-echo
+      description: This returns an echo response in JSON format.
+    parameters: []
+components:
+  schemas: {}
