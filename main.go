@@ -7,10 +7,17 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
 func main() {
+	hostname, err := os.Hostname()
+	if err != nil {
+		fmt.Printf("Unable to collect hostname: %s\n", err.Error())
+		hostname = "unknown"
+	}
+
 	h := func(w http.ResponseWriter, r *http.Request) {
 		headers := r.Header
 		u := r.URL
@@ -41,9 +48,11 @@ func main() {
 		}
 
 		msg := struct {
+			Hostname  string      `json:"host"`
 			Timestamp time.Time   `json:"ts"`
 			Request   interface{} `json:"request"`
 		}{
+			Hostname:  hostname,
 			Timestamp: time.Now().UTC(),
 			Request:   rMsg,
 		}
@@ -54,6 +63,7 @@ func main() {
 		}
 		fmt.Printf("%s\n", string(rjson))
 		w.Header().Add("Content-Type", "application/json")
+		w.Header().Add("Server", "https://github.com/rossmcdonald/echo-json")
 		fmt.Fprintf(w, "%s\n", string(rjson))
 	}
 
