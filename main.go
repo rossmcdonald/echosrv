@@ -8,7 +8,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	requestCount = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "echo_request_count",
+		Help: "The total number of received requests",
+	})
 )
 
 func main() {
@@ -19,17 +31,33 @@ func main() {
 	}
 
 	h := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" && r.Method == http.MethodGet {
+			promhttp.Handler().ServeHTTP(w, r)
+			return
+		}
+
 		errors := []string{}
 
 		headers := r.Header
 		u := r.URL
 
+		requestCount.Inc()
+
+		var jsonBody interface{}
 		var body string
 		buf, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			errors = append(errors, err.Error())
+			errors = append(errors, fmt.Sprintf("Encountered error ready request body: %s", err.Error()))
 		} else {
-			body = string(buf)
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+				err = json.Unmarshal(buf, &jsonBody)
+				if err != nil {
+					errors = append(errors, fmt.Sprintf("Encountered parsing JSON request body: %s", err.Error()))
+					body = string(buf) // treat body as string
+				}
+			} else {
+				body = string(buf)
+			}
 		}
 
 		host := r.Host
@@ -42,7 +70,7 @@ func main() {
 		rMsg := struct {
 			Headers  http.Header `json:"headers"`
 			URL      url.URL     `json:"url"`
-			Body     string      `json:"body"`
+			Body     interface{} `json:"body"`
 			Host     string      `json:"host"`
 			Protocol string      `json:"proto"`
 			Method   string      `json:"method"`
@@ -55,6 +83,10 @@ func main() {
 			Protocol: proto,
 			Method:   method,
 			Form:     form,
+		}
+
+		if jsonBody != nil {
+			rMsg.Body = jsonBody
 		}
 
 		msg := struct {
