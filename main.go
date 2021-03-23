@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -44,20 +45,33 @@ func main() {
 		requestCount.Inc()
 
 		var jsonBody interface{}
-		var body string
-		buf, err := ioutil.ReadAll(r.Body)
+		var strBody string
+		buf, err := ioutil.ReadAll(io.LimitReader(r.Body, 10000))
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Encountered error ready request body: %s", err.Error()))
 		} else {
-			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+			reqTooLarge := false
+			if len(buf) > 10000 {
+				errors = append(errors, fmt.Sprintf("Request size %d too large to process", len(buf)))
+				reqTooLarge = true
+			}
+
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") && !reqTooLarge {
 				err = json.Unmarshal(buf, &jsonBody)
 				if err != nil {
 					errors = append(errors, fmt.Sprintf("Encountered parsing JSON request body: %s", err.Error()))
-					body = string(buf) // treat body as string
+					strBody = string(buf)
 				}
+			} else if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") {
+				strBody = "<some binary data>"
 			} else {
-				body = string(buf)
+				if reqTooLarge {
+					strBody = string(buf[:10000])
+				} else {
+					strBody = string(buf)
+				}
 			}
+
 		}
 
 		host := r.Host
@@ -78,7 +92,7 @@ func main() {
 		}{
 			Headers:  headers,
 			URL:      *u,
-			Body:     body,
+			Body:     strBody,
 			Host:     host,
 			Protocol: proto,
 			Method:   method,
