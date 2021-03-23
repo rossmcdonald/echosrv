@@ -1,17 +1,19 @@
 FROM alpine
 
-RUN apk add go make
+RUN apk add go make git
 
-RUN mkdir /app
+RUN mkdir /app /go
+ENV GOPATH=/go
 
-ADD main.go /app/
+ADD main.go go.mod go.sum /app/
 ADD Makefile /app/
 
 WORKDIR /app
 
-RUN make echo 
-RUN apk del go make
+RUN make deps
+RUN make
+RUN apk del go make git && rm -rf /go && rm -rf /root/.cache
 
-EXPOSE 8888
+EXPOSE 8889
 
 ENTRYPOINT ["./echo"]
