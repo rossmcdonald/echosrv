@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/handlers"
 
@@ -52,10 +53,22 @@ func (h *CHeader) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	return nil
 }
 
+func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	log.SetFormatter(&log.TextFormatter{})
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	log.SetOutput(os.Stdout)
+
+	// Only log the warning severity or above.
+	log.SetLevel(log.InfoLevel)
+}
+
 func main() {
 	hostname, err := os.Hostname()
 	if err != nil {
-		fmt.Printf("[warn] Unable to collect hostname: %s\n", err.Error())
+		log.Warnf("Unable to collect hostname: %s\n", err.Error())
 		hostname = "unknown"
 	}
 
@@ -89,14 +102,14 @@ func main() {
 			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") && !reqTooLarge {
 				err = json.Unmarshal(buf, &jsonBody)
 				if err != nil {
-					fmt.Printf("[error] Encountered parsing JSON request body: %s\n", err.Error())
+					log.Errorf("Encountered parsing JSON request body: %s\n", err.Error())
 					errors = append(errors, fmt.Sprintf("Encountered parsing JSON request body: %s", err.Error()))
 					strBody = string(buf)
 				}
 			} else if strings.HasPrefix(r.Header.Get("Content-Type"), "application/xml") && !reqTooLarge {
 				err = xml.Unmarshal(buf, &jsonBody)
 				if err != nil {
-					fmt.Printf("[error] Encountered parsing XML request body: %s\n", err.Error())
+					log.Errorf("Encountered parsing XML request body: %s\n", err.Error())
 					errors = append(errors, fmt.Sprintf("Encountered parsing XML request body: %s", err.Error()))
 					strBody = string(buf)
 				}
@@ -144,25 +157,24 @@ func main() {
 		if strings.HasPrefix(r.Header.Get("Accept"), "application/xml") {
 			rxml, err := xml.MarshalIndent(msg, "", "\t")
 			if err != nil {
-				fmt.Printf("[error] Encountered outputting XML request body: %s\n", err.Error())
+				log.Errorf("Encountered outputting XML request body: %s\n", err.Error())
 				w.Header().Set("Content-Type", "application/xml")
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("<error>Error encountered while processing your request</error>"))
 				return
 			}
-			fmt.Printf("[info] request received\n%s\n", string(rxml))
 			w.Header().Add("Content-Type", "application/xml")
 			fmt.Fprintf(w, "%s\n", string(rxml))
 		} else {
 			rjson, err := json.MarshalIndent(msg, "", "\t")
 			if err != nil {
-				fmt.Printf("[error] Encountered outputting JSON response: %s\n", err.Error())
+				log.Errorf("Encountered outputting JSON response: %s\n", err.Error())
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("{\"error\":\"Error encountered while processing your request\"}"))
 				return
 			}
-			fmt.Printf("[info] request received\n%s\n", string(rjson))
+
 			w.Header().Add("Content-Type", "application/json")
 			fmt.Fprintf(w, "%s\n", string(rjson))
 		}
@@ -177,6 +189,6 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	fmt.Printf("[info] 🚀 Listening for traffic on: %s\n", bind)
+	log.Infof("🚀 Listening for traffic on: %s\n", bind)
 	log.Fatal(s.ListenAndServe())
 }
