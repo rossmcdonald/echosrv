@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,28 +30,22 @@ var (
 )
 
 type RequestObj struct {
-	Headers  CHeader     `json:"headers" xml:"-"`
-	URL      url.URL     `json:"url" xml:"-"`
-	Body     interface{} `json:"body" xml:"-"`
-	Host     string      `json:"host" xml:"host"`
-	Protocol string      `json:"proto" xml:"proto"`
-	Method   string      `json:"method" xml:"method"`
-	Form     url.Values  `json:"form" xml:"-"`
+	Headers  map[string]string `json:"headers"`
+	Path     string            `json:"path"`
+	Body     interface{}       `json:"body,omitempty"`
+	Host     string            `json:"host"`
+	Protocol string            `json:"protocol"`
+	Method   string            `json:"method"`
+	Form     url.Values        `json:"form,omitempty"`
+	Query    map[string]string `json:"query,omitempty"`
 }
 
 type ResponseMsg struct {
 	Hostname  string      `json:"host" xml:"host"`
 	Timestamp string      `json:"ts" xml:"ts"`
-	Request   *RequestObj `json:"request" xml:"request"`
-	Errors    []string    `json:"errors" xml:"errors"`
-}
-
-type CHeader struct {
-	*http.Header
-}
-
-func (h *CHeader) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	return nil
+	Request   *RequestObj `json:"request"`
+	Errors    []string    `json:"errors,omitempty"`
+	Duration  string      `json:"time_taken,omitempty"`
 }
 
 func init() {
@@ -73,20 +68,21 @@ func main() {
 	}
 
 	h := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Server", "echosrv@latest")
+
 		if r.URL.Path == "/metrics" && r.Method == http.MethodGet {
 			promhttp.Handler().ServeHTTP(w, r)
 			return
 		}
-
-		errors := []string{}
-
-		headers := CHeader{
-			&r.Header,
-		}
-		u := r.URL
-
 		requestCount.Inc()
 
+		// start timer for capturing processing time
+		startTime := time.Now()
+
+		// for storing any errors encountered while processing the request
+		errors := []string{}
+
+		// process the request body
 		var jsonBody interface{}
 		var strBody string
 		buf, err := ioutil.ReadAll(io.LimitReader(r.Body, 10000))
@@ -125,21 +121,38 @@ func main() {
 
 		}
 
-		host := r.Host
-		proto := r.Proto
-		method := r.Method
+		// process the headers into a user-friendly way
+		processedHeaders := map[string]string{}
+		headers := r.Header
+		for k, v := range headers {
+			processedHeaders[k] = v[0]
+		}
+
+		// process the query params into a user-friendly way
+		processedQueryParams := map[string]string{}
+		queryParams := r.URL.Query()
+		for k, v := range queryParams {
+			processedQueryParams[k] = v[0]
+		}
+
+		// allow for overriding response code via query param
+		if status := queryParams.Get("status"); status != "" {
+			if s, err := strconv.Atoi(status); err == nil {
+				w.WriteHeader(s)
+			}
+		}
 
 		r.ParseForm()
-		form := r.Form
 
 		rMsg := RequestObj{
-			Headers:  headers,
-			URL:      *u,
+			Headers:  processedHeaders,
+			Path:     r.URL.Path,
 			Body:     strBody,
-			Host:     host,
-			Protocol: proto,
-			Method:   method,
-			Form:     form,
+			Host:     r.Host,
+			Protocol: r.Proto,
+			Method:   r.Method,
+			Form:     r.PostForm,
+			Query:    processedQueryParams,
 		}
 
 		if jsonBody != nil {
@@ -151,33 +164,20 @@ func main() {
 			Timestamp: time.Now().UTC().String(),
 			Request:   &rMsg,
 			Errors:    errors,
+			Duration:  time.Now().Sub(startTime).String(),
 		}
-		w.Header().Add("Server", "echosrv@latest")
 
-		if strings.HasPrefix(r.Header.Get("Accept"), "application/xml") {
-			rxml, err := xml.MarshalIndent(msg, "", "\t")
-			if err != nil {
-				log.Errorf("Encountered outputting XML request body: %s\n", err.Error())
-				w.Header().Set("Content-Type", "application/xml")
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("<error>Error encountered while processing your request</error>"))
-				return
-			}
-			w.Header().Add("Content-Type", "application/xml")
-			fmt.Fprintf(w, "%s\n", string(rxml))
-		} else {
-			rjson, err := json.MarshalIndent(msg, "", "\t")
-			if err != nil {
-				log.Errorf("Encountered outputting JSON response: %s\n", err.Error())
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("{\"error\":\"Error encountered while processing your request\"}"))
-				return
-			}
-
-			w.Header().Add("Content-Type", "application/json")
-			fmt.Fprintf(w, "%s\n", string(rjson))
+		rjson, err := json.MarshalIndent(msg, "", "\t")
+		if err != nil {
+			log.Errorf("Encountered outputting JSON response: %s\n", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("{\"error\":\"Error encountered while processing your request\"}"))
+			return
 		}
+
+		w.Header().Add("Content-Type", "application/json")
+		fmt.Fprintf(w, "%s\n", string(rjson))
 	}
 
 	bind := ":8889"
