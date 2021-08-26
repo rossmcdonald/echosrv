@@ -25,6 +25,21 @@ metadata:
   labels:
     app: echo-json
 spec:
+  ports:
+  - port: 8889
+    targetPort: 8889
+    protocol: TCP
+    name: http
+  selector:
+    app: echo-json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-json-lb
+  labels:
+    app: echo-json
+spec:
   type: LoadBalancer
   ports:
   - port: 8889
@@ -33,3 +48,18 @@ spec:
     name: http
   selector:
     app: echo-json
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: echo-json
+  annotations:
+    kubernetes.io/ingress.class: kong
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /echo
+        backend:
+          serviceName: echo-json
+          servicePort: 8889

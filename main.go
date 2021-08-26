@@ -142,6 +142,13 @@ func main() {
 			}
 		}
 
+		// allow for injecting latency in ms
+		if latency := queryParams.Get("latency"); latency != "" {
+			if s, err := strconv.Atoi(latency); err == nil {
+				time.Sleep(time.Duration(s * int(time.Millisecond)))
+			}
+		}
+
 		r.ParseForm()
 
 		rMsg := RequestObj{
