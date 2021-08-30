@@ -1,5 +1,5 @@
-echo : main.go
-	go build -o echo main.go
+echosrv : main.go
+	go build -o echosrv main.go
 
 deps :
 	go mod download
@@ -13,4 +13,4 @@ push :
 	docker push rossmcd/echo-json:$(shell git rev-parse --short HEAD)
 
 clean :
-	rm echo
+	rm echosrv

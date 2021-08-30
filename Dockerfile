@@ -16,4 +16,4 @@ RUN apk del go make git && rm -rf /go && rm -rf /root/.cache
 
 EXPOSE 8889
 
-ENTRYPOINT ["./echo"]
+ENTRYPOINT ["./echosrv"]
